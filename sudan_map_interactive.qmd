@@ -1,0 +1,218 @@
+---
+title: "sudan_map"
+format: html
+editor: visual
+---
+
+
+
+```{r}
+
+# 0. Loading libraries ----------------------------------------------------
+
+#' Background on data:
+#' based on the following proxies on development:
+#' BUILT: ratio between urban area
+#' Child dependency ratio: 
+#' infant mortality rate: 
+#' subnational human development index
+#' Night light
+#' 
+#' https://www.earthdata.nasa.gov/news/feature-articles/measuring-relative-poverty-deprivation-around-globe
+
+
+library(tidyverse) 
+library(rgeoboundaries) 
+library(sf)
+library(terra) 
+library(rayshader) 
+library(remotes) 
+library(geodata)
+library(janitor)
+library(ggiraph)
+library(ggrepel)
+library(htmlwidgets)
+
+
+# 1. Loading geodata of Sudan ---------------------------------------------
+
+sudan_states = geodata::gadm(country = "SDN", level = 1, path = tempdir()) |> 
+  # Convert to an sf object
+  st_as_sf() 
+  # # Nicer output
+  # as_tibble() |> 
+  # janitor::clean_names()
+
+# 2. Global Gridded Relative Deprivation Index (GRDI), Version 1
+
+unzip("povmap-grdi-v1-grdiv1-geotiff.zip")
+
+grdi <- terra::rast("povmap-grdi-v1.tif")
+
+
+# 3. CROP GRDI BY INDIAN SHAPEFILE ----------------------------------------
+
+
+sudan_grdi <- terra::crop(
+  grdi,
+  terra::vect(sudan_states),  # coercing the sf object to terra friendly format
+  snap = "in",                # argument "in" to keep only with Sudan boundaries
+  mask = T                    # argument to discard data outside Sudan boundaries 
+)
+
+# 4. AVERAGE GRDI WITH ZONAL STATISTICS
+
+# using terra::zonal to calculate the zonal statistics for each district 
+sudan_grdi_zs <- terra::zonal(
+  sudan_grdi,
+  terra::vect(
+    sudan_states
+  ),
+  fun = "mean",
+  na.rm = T
+)
+
+sudan_states_grdi <- cbind(
+  sudan_states,
+  sudan_grdi_zs
+)
+
+names(sudan_states_grdi)[12] <- "grdi"
+
+
+# 5. MAP ------------------------------------------------------------------
+
+p1 <- ggplot() +
+  geom_sf(data = sudan_states_grdi,
+    aes(fill = grdi),
+    color = "grey10",
+    size = .25,
+    alpha = .75
+  ) +
+  geom_sf_label(
+    data = sudan_states_grdi,
+    aes(label = round(grdi, 1)),
+    color = "grey10",
+    size = 2.2,
+    label.size = NA,
+    alpha = .5
+  ) +
+  scale_fill_gradientn(
+    name = "GRDI",
+    colors = rev(hcl.colors(8, "Heat", alpha =  .85))  # see more options with hcl.pals()
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "right"
+    #plot.margin = unit(c(t = -3, r = 2, b = -3, l = .5), "lines")
+  ) +
+  labs(
+    title = "Relative deprivation index (2010-2020)",
+    caption = "Data: Global Gridded Relative Deprivation Index, v.1"
+  )
+
+
+
+
+```
+
+
+## City coordinates
+
+```{r}
+
+
+# Data for six biggest cities in Sudan
+cities <- data.frame(
+  city_name = c("Khartoum", "Nyala", "Port Sudan", "Kassala", 
+                "El Obeid", "Al Qadarif", "Kosti", "Wad Madani", "El Fasher"),
+  latitude = c(15.5007, 12.0621, 19.6175, 15.4500, 
+               13.1827, 14.0347, 13.1629, 14.4049, 13.6299),
+  longitude = c(32.5599, 24.8807, 37.2164, 36.4000, 
+                30.2167, 35.3834, 32.6635, 33.5199, 25.3494)
+)
+
+
+# Convert to sf object
+cities_sf <- st_as_sf(cities, coords = c("longitude", "latitude"), crs = 4326)
+
+```
+
+
+## Interactive map
+
+```{r}
+# interactive map ---------------------------------------------------------
+
+# Updated interactive plot with ggiraph
+p2 <- ggplot() +
+  
+  # Interactive map
+  geom_sf_interactive(
+    data = sudan_states_grdi,
+    aes(
+      fill = grdi,
+      tooltip = paste0("Region: ", NAME_1, "<br>GRDI: ", round(grdi, 1)),  
+      data_id = GID_1  # Unique ID for interactivity
+    ),
+    color = "grey10",
+    size = .25,
+    alpha = .75
+  ) +
+  
+  # layer for cities 
+    geom_sf(
+    data = cities_sf,
+    color = "grey10",      
+    size = 2,            
+    shape = 21,          
+    fill = "grey10"      
+  ) +
+  
+  # text over cities 
+  geom_text_repel(
+    data = cities_sf,
+    aes(
+      geometry = geometry,
+      label = city_name
+    ),
+    stat = "sf_coordinates",
+    size = 3,
+    color = "black",
+    min.segment.length = 0   # Ensures all labels have segments if moved
+  ) +
+  
+  # Styling
+  scale_fill_gradientn(
+    name = "GRDI",
+    colors = rev(hcl.colors(8, "Heat", alpha =  .85))
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 18, face = "bold"),
+    plot.caption = element_text(size = 12)
+  ) +
+  labs(
+    title = "Sudan: Relative deprivation index (2010-2020)",
+    caption = "Data: https://www.earthdata.nasa.gov/"
+  )
+
+# Wrap in giraffe to render interactive plot and customize options
+interactive_plot <- girafe(ggobj = p2, width_svg = 12, height_svg = 7)
+interactive_plot <- girafe_options(
+  interactive_plot,
+  opts_hover(css = "fill-opacity:0.8;"),
+  opts_tooltip(css = "background-color:white; color:black; padding:5px; border-radius:5px;")
+)
+
+#| fig-height: 12
+#| fig-width: 8
+# Display the interactive plot
+interactive_plot
+
+#saveWidget(interactive_plot, "sudan_grdi.html", background = "white")
+```
+
+
+new code
