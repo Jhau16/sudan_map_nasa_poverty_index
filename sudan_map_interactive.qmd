@@ -6,7 +6,7 @@ editor: visual
 
 
 
-```{r}
+```{r echo=FALSE, warning=FALSE}
 
 # 0. Loading libraries ----------------------------------------------------
 
@@ -34,7 +34,7 @@ library(ggrepel)
 library(htmlwidgets)
 
 
-# 1. Loading geodata of Sudan ---------------------------------------------
+# 1. LOADING GEO DATA OF SUDAN ---------------------------------------------
 
 sudan_states = geodata::gadm(country = "SDN", level = 1, path = tempdir()) |> 
   # Convert to an sf object
@@ -43,14 +43,14 @@ sudan_states = geodata::gadm(country = "SDN", level = 1, path = tempdir()) |>
   # as_tibble() |> 
   # janitor::clean_names()
 
-# 2. Global Gridded Relative Deprivation Index (GRDI), Version 1
+# 2. GLOBAL GRIDDED RELATIVE DEPRIVATION INDEX (GRDI)
 
 unzip("povmap-grdi-v1-grdiv1-geotiff.zip")
 
 grdi <- terra::rast("povmap-grdi-v1.tif")
 
 
-# 3. CROP GRDI BY INDIAN SHAPEFILE ----------------------------------------
+# 3. CROP GRDI BY SUDAN SHAPEFILE ----------------------------------------
 
 
 sudan_grdi <- terra::crop(
@@ -60,7 +60,8 @@ sudan_grdi <- terra::crop(
   mask = T                    # argument to discard data outside Sudan boundaries 
 )
 
-# 4. AVERAGE GRDI WITH ZONAL STATISTICS
+
+# 4. AVERAGE GRDI WITH ZONAL STATISTICS ----------------------------------
 
 # using terra::zonal to calculate the zonal statistics for each district 
 sudan_grdi_zs <- terra::zonal(
@@ -119,7 +120,7 @@ p1 <- ggplot() +
 
 ## City coordinates
 
-```{r}
+```{r echo=FALSE, results='hide'}
 
 
 # Data for six biggest cities in Sudan
@@ -133,7 +134,6 @@ cities <- data.frame(
 )
 
 
-# Convert to sf object
 cities_sf <- st_as_sf(cities, coords = c("longitude", "latitude"), crs = 4326)
 
 ```
@@ -141,10 +141,10 @@ cities_sf <- st_as_sf(cities, coords = c("longitude", "latitude"), crs = 4326)
 
 ## Interactive map
 
-```{r}
-# interactive map ---------------------------------------------------------
+```{r echo=FALSE, warning=FALSE}
+# INTERACTIVE MAP ---------------------------------------------------------
 
-# Updated interactive plot with ggiraph
+# Interactive plot with ggiraph
 p2 <- ggplot() +
   
   # Interactive map
@@ -153,7 +153,7 @@ p2 <- ggplot() +
     aes(
       fill = grdi,
       tooltip = paste0("Region: ", NAME_1, "<br>GRDI: ", round(grdi, 1)),  
-      data_id = GID_1  # Unique ID for interactivity
+      data_id = GID_1  
     ),
     color = "grey10",
     size = .25,
@@ -179,7 +179,7 @@ p2 <- ggplot() +
     stat = "sf_coordinates",
     size = 3,
     color = "black",
-    min.segment.length = 0   # Ensures all labels have segments if moved
+    min.segment.length = 0   # setting whereby labels have segments if moved
   ) +
   
   # Styling
